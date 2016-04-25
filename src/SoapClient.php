@@ -29,17 +29,17 @@ class SoapClient implements SoapClientInterface
         return $this->callAsync($name, $arguments);
     }
 
-    public function call($name, array $arguments, array $options = null, $inputHeaders = null, array &$output_headers = null)
+    public function call($name, array $arguments, array $options = null, $inputHeaders = null, array &$outputHeaders = null)
     {
-        $promise = $this->callAsync($name, $arguments, $options, $inputHeaders, $output_headers);
+        $promise = $this->callAsync($name, $arguments, $options, $inputHeaders, $outputHeaders);
         return wait($promise);
     }
 
-    public function callAsync($name, array $arguments, array $options = null, $inputHeaders = null, array &$output_headers = null)
+    public function callAsync($name, array $arguments, array $options = null, $inputHeaders = null, array &$outputHeaders = null)
     {
         $deferredResult = new Deferred;
         $this->deferredHttpBinding->when(
-            function (\Exception $error = null, $httpBinding) use ($deferredResult, $name, $arguments, $options, $inputHeaders, $output_headers) {
+            function (\Exception $error = null, $httpBinding) use ($deferredResult, $name, $arguments, $options, $inputHeaders, &$outputHeaders) {
                 if ($error) {
                     $deferredResult->fail($error);
                 } else {
@@ -50,21 +50,25 @@ class SoapClient implements SoapClientInterface
                     $request->setUri($psrRequest->getUri());
                     $request->setAllHeaders($psrRequest->getHeaders());
                     $request->setBody($psrRequest->getBody()->__toString());
+                    $psrRequest->getBody()->close();
+
                     $this->client->request($request)->when(
-                        function (\Exception $error = null, $response) use ($name, $output_headers, $deferredResult, $httpBinding) {
+                        function (\Exception $error = null, $response) use ($name, &$outputHeaders, $deferredResult, $httpBinding) {
                             if ($error) {
                                 $deferredResult->fail($error);
                             } else {
-                                $bodyStream = fopen('php://temp', 'r+');
+                                $bodyStream = new Stream('php://temp', 'r+');
                                 /** @var Response $response */
-                                fwrite($bodyStream, $response->getBody());
-                                fseek($bodyStream, 0);
-                                $bodyStream = new Stream($bodyStream);
+                                $bodyStream->write($response->getBody());
+                                $bodyStream->rewind();
                                 $psrResponse = new PsrResponse($bodyStream, $response->getStatus(), $response->getAllHeaders());
+
                                 try {
-                                    $deferredResult->succeed($httpBinding->response($psrResponse, $name, $output_headers));
+                                    $deferredResult->succeed($httpBinding->response($psrResponse, $name, $outputHeaders));
                                 } catch (\Exception $e) {
                                     $deferredResult->fail($e);
+                                } finally {
+                                    $psrResponse->getBody()->close();
                                 }
 
                             }
