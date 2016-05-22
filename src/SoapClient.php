@@ -7,6 +7,7 @@ use Amp\Artax\Request;
 use Amp\Artax\Response;
 use Amp\Deferred;
 use Amp\Promise;
+use GuzzleHttp\Promise\Promise as GuzzlePromise;
 use Meng\AsyncSoap\SoapClientInterface;
 use Meng\Soap\HttpBinding\HttpBinding;
 use Zend\Diactoros\Response as PsrResponse;
@@ -32,7 +33,7 @@ class SoapClient implements SoapClientInterface
     public function call($name, array $arguments, array $options = null, $inputHeaders = null, array &$outputHeaders = null)
     {
         $promise = $this->callAsync($name, $arguments, $options, $inputHeaders, $outputHeaders);
-        return wait($promise);
+        return $promise->wait();
     }
 
     public function callAsync($name, array $arguments, array $options = null, $inputHeaders = null, array &$outputHeaders = null)
@@ -78,6 +79,29 @@ class SoapClient implements SoapClientInterface
             }
         );
 
-        return $deferredResult->promise();
+        return $this->convertPromise($deferredResult->promise());
+    }
+
+    /**
+     * Amp promise interface does not conform to https://promisesaplus.com, so it should be converted
+     * to a Guzzle promise in order to fulfill the return type of  SoapClientInterface::callAsync.
+     * @param Promise $ampPromise
+     * @return GuzzlePromise
+     */
+    private function convertPromise(Promise $ampPromise)
+    {
+        $guzzlePromise = new GuzzlePromise(
+            function () use ($ampPromise) {
+                wait($ampPromise);
+            }
+        );
+        $ampPromise->when(function (\Exception $error = null, $value) use ($guzzlePromise) {
+            if ($error) {
+                $guzzlePromise->reject($error);
+            } else {
+                $guzzlePromise->resolve($value);
+            }
+        });
+        return $guzzlePromise;
     }
 }

@@ -6,12 +6,24 @@ use Amp\Artax\Client;
 use Amp\Artax\Request;
 use Amp\Artax\Response;
 use Amp\Deferred;
+use Meng\AsyncSoap\SoapClientInterface;
 use Meng\Soap\HttpBinding\HttpBinding;
 use Meng\Soap\HttpBinding\RequestBuilder;
 use Meng\Soap\Interpreter;
 
 class Factory
 {
+    /**
+     * Create an instance of SoapClientInterface asynchronously.
+     *
+     * @param Client $client                An Artax HTTP client.
+     * @param mixed $wsdl                   URI of the WSDL file or NULL if working in non-WSDL mode.
+     * @param array $options                Supported options: location, uri, style, use, soap_version, encoding,
+     *                                      exceptions, classmap, typemap, and feature. HTTP related options should
+     *                                      be configured against $client, e.g., authentication, proxy, user agent,
+     *                                      and connection timeout etc.
+     * @return SoapClientInterface
+     */
     public function create(Client $client, $wsdl, array $options = [])
     {
         $deferredHttpBinding = new Deferred;
